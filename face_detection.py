@@ -35,10 +35,14 @@ save_images = st.sidebar.checkbox("💾 Sauvegarder les visages détectés")
 hex_color = rect_color_hex.lstrip('#')
 rect_color_bgr = tuple(int(hex_color[i:i+2], 16) for i in (4, 2, 0))
 
+# Compteur global (stocké dans la session Streamlit)
+if "total_faces_detected" not in st.session_state:
+    st.session_state.total_faces_detected = 0
+
 # Définir le transformateur vidéo
 class FaceDetectionTransformer(VideoTransformerBase):
     def __init__(self):
-        self.count = 0
+        self.face_counter = 0
 
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
@@ -62,7 +66,9 @@ class FaceDetectionTransformer(VideoTransformerBase):
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = os.path.join(save_dir, f"face_{timestamp}_{i}.jpg")
                 cv2.imwrite(filename, img[y:y+h, x:x+w])
-                self.count += 1
+
+        # ➕ Mise à jour du compteur global
+        st.session_state.total_faces_detected += len(faces)
 
         return img
 
@@ -71,3 +77,6 @@ webrtc_streamer(
     key="face-detection",
     video_transformer_factory=FaceDetectionTransformer
 )
+
+# Afficher le compteur total
+st.markdown(f"### 👤 Nombre total de visages détectés pendant la session : **{st.session_state.total_faces_detected}**")
