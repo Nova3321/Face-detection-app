@@ -1,11 +1,11 @@
+# Importer les bibliothèques nécessaires
 import cv2
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import datetime
 import os
+import datetime
 
 # Charger le classificateur Haar cascade
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 
 if face_cascade.empty():
     st.error("Erreur : le fichier Haar cascade n'a pas été chargé ! Vérifie le chemin.")
@@ -15,68 +15,71 @@ save_dir = "saved_faces"
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 
-st.title("👀 Face Detection with Viola-Jones (Streamlit + WebRTC)")
+st.title("Face Detection with Viola-Jones in Streamlit")
 st.markdown("""
 **Instructions :**  
-1. Autorisez l'accès à votre webcam.  
-2. Ajustez les paramètres dans la barre latérale.  
-3. Les visages seront détectés en temps réel.  
-4. Activez l'option pour sauvegarder les visages détectés.  
+1. Cliquez sur **Start Webcam** pour lancer la détection.  
+2. Ajustez les paramètres `scaleFactor` et `minNeighbors` pour améliorer la détection.  
+3. Choisissez la couleur des rectangles autour des visages.  
+4. Cochez la case pour sauvegarder les visages détectés.  
+5. Cliquez sur **Stop Webcam** pour arrêter la détection.
 """)
 
-# Paramètres ajustables
-st.sidebar.header("⚙️ Paramètres de détection")
-scale_factor = st.sidebar.slider("Paramètre scaleFactor", 1.01, 2.0, 1.3, 0.01)
-min_neighbors = st.sidebar.slider("Paramètre minNeighbors", 1, 10, 5)
-rect_color_hex = st.sidebar.color_picker("Couleur des rectangles", "#00FF00")
-save_images = st.sidebar.checkbox("💾 Sauvegarder les visages détectés")
+# Paramètres ajustables par l'utilisateur
+scale_factor = st.slider("Choisissez le paramètre scaleFactor", 1.01, 2.0, 1.3, 0.01)
+min_neighbors = st.slider("Choisissez le paramètre minNeighbors", 1, 10, 5)
+rect_color_hex = st.color_picker("Choisissez la couleur des rectangles", "#00FF00")
+save_images = st.checkbox("Sauvegarder les visages détectés")
 
-# Conversion couleur HEX → BGR
+# Convertir la couleur hex en BGR pour OpenCV
 hex_color = rect_color_hex.lstrip('#')
 rect_color_bgr = tuple(int(hex_color[i:i+2], 16) for i in (4, 2, 0))
 
-# Compteur global (stocké dans la session Streamlit)
-if "total_faces_detected" not in st.session_state:
-    st.session_state.total_faces_detected = 0
+# Zone pour afficher le flux vidéo
+frame_placeholder = st.empty()
+# Zone pour afficher le nombre de visages
+face_count_placeholder = st.empty()
 
-# Définir le transformateur vidéo
-class FaceDetectionTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.face_counter = 0
+# Boutons de contrôle
+start = st.button("Start Webcam")
+stop = st.button("Stop Webcam")
 
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
+# Si l'utilisateur clique sur Start
+if start:
+    cap = cv2.VideoCapture(0)
+    st.write("Webcam démarrée.")
 
-        # Améliorer le contraste
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.equalizeHist(gray)
+    # Utiliser une boucle tant que Stop n'est pas cliqué
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            st.write("Impossible d'accéder à la webcam.")
+            break
 
-        # Détection des visages
-        faces = face_cascade.detectMultiScale(
-            gray,
-            scaleFactor=scale_factor,
-            minNeighbors=min_neighbors,
-            minSize=(50, 50)
-        )
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=scale_factor, minNeighbors=min_neighbors)
+
+        # Compter les visages détectés
+        face_count = len(faces)
+        face_count_placeholder.markdown(f"**Nombre de visages détectés : {face_count}**")
 
         for i, (x, y, w, h) in enumerate(faces):
-            cv2.rectangle(img, (x, y), (x + w, y + h), rect_color_bgr, 2)
+            # Dessiner le rectangle autour du visage
+            cv2.rectangle(frame, (x, y), (x + w, y + h), rect_color_bgr, 2)
 
+            # Sauvegarder le visage si demandé
             if save_images:
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = os.path.join(save_dir, f"face_{timestamp}_{i}.jpg")
-                cv2.imwrite(filename, img[y:y+h, x:x+w])
+                cv2.imwrite(filename, frame[y:y+h, x:x+w])
 
-        # ➕ Mise à jour du compteur global
-        st.session_state.total_faces_detected += len(faces)
+        # Convertir BGR en RGB pour Streamlit
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_placeholder.image(frame_rgb, channels="RGB")
 
-        return img
+        # Vérifier si Stop a été cliqué
+        if stop:
+            st.write("Webcam arrêtée.")
+            break
 
-# Lancer le flux WebRTC
-webrtc_streamer(
-    key="face-detection",
-    video_transformer_factory=FaceDetectionTransformer
-)
-
-# Afficher le compteur total
-st.markdown(f"### 👤 Nombre total de visages détectés pendant la session : **{st.session_state.total_faces_detected}**")
+    cap.release()
