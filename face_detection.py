@@ -1,15 +1,16 @@
+# Importer les bibliothèques nécessaires
 import cv2
 import streamlit as st
 import os
 import datetime
 
-# Charger le classificateur Haar depuis le package OpenCV
+# Charger le classificateur Haar depuis le répertoire interne d'OpenCV
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
 
 if face_cascade.empty():
-    st.error("Erreur : le fichier Haar cascade n'a pas été chargé ! Vérifie le chemin.")
+    st.error("Erreur : le fichier Haar cascade n'a pas été chargé ! Vérifie l'installation d'OpenCV.")
 
 # Créer un dossier pour sauvegarder les images si nécessaire
 save_dir = "saved_faces"
